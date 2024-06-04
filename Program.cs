@@ -1,23 +1,44 @@
-﻿internal class Program
+﻿using System.Collections.Frozen;
+
+internal class Program
 {
-    readonly int[] indexes = [-6, -5, -4, 1, 6, 5, 4, -1];
+    private static readonly int[] indexes = [-6, -5, -4, 1, 6, 5, 4, -1];
+    private const string alphabet = "abcdefghijklmnopqrstuvwxyz";
+    private static readonly int[] scores = [1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 10, 1, 1, 1, 1, 4, 4, 8, 4, 10];
+    private static string grid;
+    private const string path = "../../../";
+    
     public static void Main(string[] args) {
-        const string grid = "ahdlshgiehajeuidnzlfkqieu";
-        
-        
-        
+        grid = "ZJFIESOJUVIHUAEBCHTUIOSDT";
+        ReadOnlySpan<char> gridSpan = grid.AsSpan();
+
+        Console.WriteLine(GetPossibleWords("trimmedWords.txt", gridSpan).Count);
+
+    }
+
+    static List<string> GetPossibleWords(string fileName, ReadOnlySpan<char> gridSpan) {
+        StreamReader reader = new(path + fileName);
+        List<string> words = [];
+        while (!reader.EndOfStream) {
+            string word = reader.ReadLine()!;
+            ReadOnlySpan<char> wordSpan = word.AsSpan();
+            if (!wordSpan.ContainsAnyExcept(gridSpan)) {
+                words.Add(word);
+            }
+        }
+        reader.Close();
+        return words;
     }
 
     static void TrimWords(int length, string fileName) {
-        StreamReader reader = new(@"../../../collinsWords.txt");
+        StreamReader reader = new(path + fileName);
         List<string> words = [];
         while (!reader.EndOfStream) {
             string word = reader.ReadLine()!;
             if (word.Length > length) words.Add(word);
         }
-
         reader.Close();
-        File.WriteAllLines("../../../trimmedWords.txt", words);
+        File.WriteAllLines(path + "trimmedWords.txt", words);
     }
 
     static int[] GetNeighbours(int index) {
@@ -78,6 +99,10 @@
         }
 
         return neighbours;
+    }
+
+    static int GetScore(char letter) {
+        return scores[letter - 65];
     }
 }
 
