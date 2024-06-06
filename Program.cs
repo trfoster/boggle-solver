@@ -6,25 +6,28 @@ internal class Program
     private static readonly int[] indexes = [-6, -5, -4, 1, 6, 5, 4, -1];
     private const string alphabet = "abcdefghijklmnopqrstuvwxyz";
     private static readonly int[] scores = [1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 8, 1, 1, 1, 1, 4, 4, 7, 4, 8];
-    private static string grid;
+    private static string gridString;
     private const string path = "../../../";
     public static int[] countsConstant;
     public static int[] counts;
     public static int doubleWordIndex = -1;
     public static int doubleLetterIndex = -1;
     public static int tripleLetterIndex = -1;
-    public static int[] gemIndexes;
     
     public static void Main(string[] args) {
         //temp grid setup
-        grid = "NQJTAAAKRYBNSXUVRURIIHUEY";
+        gridString = "NQJTAAAKRYBNSXUVRURIIHUEY";
         doubleWordIndex = 10;
+        doubleLetterIndex = -1;
         tripleLetterIndex = 5;
-        gemIndexes = [1, 4, 5, 7, 11, 14, 17, 18, 21, 23];
         
-        countsConstant = GenerateCounts(grid);
+        countsConstant = GenerateCounts(gridString);
         counts = new int[26];
         Array.Copy(countsConstant, counts, 26);
+
+        foreach (int index in gridString.IndexOfAll('A')) {
+            Console.WriteLine(index);
+        }
         
         foreach (string word in GetPossibleWords("trimmedWords.txt").OrderByDescending(x => x.Length).Take(10)) {
             Console.WriteLine(word);
@@ -61,7 +64,17 @@ internal class Program
     }
 
     static List<Word> ScoreWords(List<string> words) {
-        
+        /*Parallel.ForEach(words, word =>
+        {
+
+        });*/
+        /*foreach (string word in words) {
+            ReadOnlySpan<char> wordSpan = word.AsSpan();
+            for (int i = 0; i < word.Length; i++) {
+                gridString.
+            }
+        }*/
+        return new List<Word>();
     }
 
     static void TrimWords(int length, string fileName) {
@@ -144,9 +157,8 @@ static class Extensions
 {
     public static int SupersetOfGridCount(this ReadOnlySpan<char> subSpan) {
         int count = 0;
-        int i;
         Span<int> countsSpan = Program.counts.AsSpan();
-        for (i = 0; i < subSpan.Length; i++) {
+        for (int i = 0; i < subSpan.Length; i++) {
             if (--countsSpan[subSpan[i] - 65] < 0) count++;
         }
         //reset counts array
@@ -155,6 +167,17 @@ static class Extensions
             countsSpan[j] = countsConstantSpan[j];
         }
         return count;
+    }
+
+    public static int[] IndexOfAll(this string grid, char character) {
+        int indexCount = Program.countsConstant.AsSpan()[character - 65];
+        int[] indexes = new int[indexCount];
+        ReadOnlySpan<char> gridSpan = grid.AsSpan();
+        for (int i = gridSpan.IndexOf(character); i > -1; i = grid.IndexOf(character, i + 1)) {
+            indexes[--indexCount] = i;
+        }
+
+        return indexes;
     }
 }
 
