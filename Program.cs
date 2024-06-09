@@ -8,8 +8,9 @@ internal class Program
     private static readonly int[] scores = [1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 8, 1, 1, 1, 1, 4, 4, 7, 4, 8];
     private static string gridString;
     private const string path = "../../../";
-    public static int[] countsConstant;
-    public static int[] counts;
+    private static int[] countsConstant;
+    private static int[] counts;
+    public static int[][] indexesOfLetters;
     public static int doubleWordIndex = -1;
     public static int doubleLetterIndex = -1;
     public static int tripleLetterIndex = -1;
@@ -24,6 +25,8 @@ internal class Program
         countsConstant = GenerateCounts(gridString);
         counts = new int[26];
         Array.Copy(countsConstant, counts, 26);
+
+        indexesOfLetters = GenerateIndexesOfLetters(gridString);
         
         foreach (string word in GetPossibleWords("trimmedWords.txt").OrderByDescending(x => x.Length).Take(5)) {
             Console.WriteLine(word);
@@ -35,14 +38,10 @@ internal class Program
         foreach (Word word in ScoreWords(possibleWords).OrderByDescending(w => w.score).Take(20)) {
             Console.WriteLine($"{word.word}, {word.score}");
         }
-        
-        
-        ReadOnlySpan<char> wordSpan = "ABACUS".AsSpan();
-        Console.WriteLine(wordSpan.SupersetOfGridCount() == 0);
-        //Console.WriteLine(wordSpan.IsSubsetOfGrid());
-        //Console.WriteLine(wordSpan.IsSubsetOfGrid());
 
         Console.WriteLine(GetPossibleWords("trimmedWords.txt").Count);
+        
+        Console.WriteLine(AreNeighbours(10, 9));
 
     }
     static int[] GenerateCounts(string grid) {
@@ -53,13 +52,21 @@ internal class Program
         return counts;
     }
 
+    static int[][] GenerateIndexesOfLetters(string grid) {
+        int[][] indexesOfLetters = new int[25][];
+        for (int i = 0; i < 25; i++) {
+            indexesOfLetters[i] = grid.IndexOfAll((char)(i + 65), countsConstant);
+        }
+        return indexesOfLetters;
+    }
+
     static List<string> GetPossibleWords(string fileName) {
         StreamReader reader = new(path + fileName);
         List<string> words = [];
         while (!reader.EndOfStream) {
             string word = reader.ReadLine()!;
             ReadOnlySpan<char> wordSpan = word.AsSpan();
-            if (wordSpan.SupersetOfGridCount() == 0) {
+            if (wordSpan.SupersetOfGridCount(counts, countsConstant) == 0) {
                 words.Add(word);
             }
         }
@@ -78,57 +85,45 @@ internal class Program
         words.Add("ANKRY");
         foreach (string word in words) {
             
-            ReadOnlySpan<char> wordSpan = word.AsSpan();
+            /*ReadOnlySpan<char> wordSpan = word.AsSpan();
             int[] startingIndexes = gridString.IndexOfAll(wordSpan[0]);
             for (int i = 0; i < startingIndexes.Length; i++) {
                 //walk
                 int wordIndex = 1;
                 int score = 0;
                 bool isDoubleScore = false;
-                bool[] isIndexVisited = new bool[25];
                 
-                int currentLetterIndex = startingIndexes[i];
-                Stack<int> indexStack = [];
-                indexStack.Push(currentLetterIndex);
-                isIndexVisited[currentLetterIndex] = true;
-                while (indexStack.Count > 0) {
-                    /*if (tripleLetterIndex == currentLetterIndex) {
-                        score += GetScore(word[wordIndex]) * 3;
-                    }
-                    else if (doubleLetterIndex == currentLetterIndex) {
-                        score += GetScore(word[wordIndex]) * 2;
-                    }
-                    else {
-                        score += GetScore(word[wordIndex]);
-                    }
-                    if (doubleWordIndex == currentLetterIndex) {
-                        isDoubleScore = true;
-                    }*/
-                    if (wordIndex > wordSpan.Length - 1) break;
-                    currentLetterIndex = indexStack.Peek();
-                    isIndexVisited[currentLetterIndex] = true;
-                    int[] neighbours = GetNeighbours(currentLetterIndex);
-                    bool hasAdded = false;
-                    for (int j = 0; j < neighbours.Length; j++) {
-                        if (gridString[neighbours[j]] == wordSpan[wordIndex] && !isIndexVisited[neighbours[j]]) {
-                            indexStack.Push(neighbours[j]);
-                            hasAdded = true;
-                            wordIndex++;
-                            break;
-                        }
-                    }
-                    if (!hasAdded) {
-                        wordIndex--;
-                        indexStack.Pop();
-                    }
-                }
-                if (wordIndex == wordSpan.Length) {
+                
+                if (CheckNode()) {
                     if (isDoubleScore) score *= 2;
                     wordList.Add(new Word(word, score));
                 }
-            }
+            }*/
         }
         return wordList;
+    }
+
+    static bool AreNeighbours(int index1, int index2) {
+        if (index1 == -1) return false;
+        int absDifference = index2 - index1;
+        if (absDifference < 0) absDifference *= -1;
+
+        if (absDifference != 6 && absDifference != 5 && absDifference != 4 && absDifference != 1) return false;
+        
+        int index1Row = index1 / 5;
+        int index2Row = index2 / 5;
+        
+        switch (absDifference) {
+            case 1:
+                return index1Row == index2Row;
+            case 6:
+            {
+                int rowDifference = index1Row - index2Row;
+                return rowDifference != 2 && rowDifference != -2;
+            }
+            default:
+                return index1Row != index2Row;
+        }
     }
 
     static void TrimWords(int length, string fileName) {
@@ -209,22 +204,22 @@ internal class Program
 
 static class Extensions
 {
-    public static int SupersetOfGridCount(this ReadOnlySpan<char> subSpan) {
+    public static int SupersetOfGridCount(this ReadOnlySpan<char> subSpan, int[] counts, int[] countsConstant) {
         int count = 0;
-        Span<int> countsSpan = Program.counts.AsSpan();
+        Span<int> countsSpan = counts.AsSpan();
         for (int i = 0; i < subSpan.Length; i++) {
             if (--countsSpan[subSpan[i] - 65] < 0) count++;
         }
         //reset counts array
-        ReadOnlySpan<int> countsConstantSpan = Program.countsConstant.AsSpan();
+        ReadOnlySpan<int> countsConstantSpan = countsConstant.AsSpan();
         for (int j = 0; j < 26; j++) {
             countsSpan[j] = countsConstantSpan[j];
         }
         return count;
     }
 
-    public static int[] IndexOfAll(this string grid, char character) {
-        int indexCount = Program.countsConstant.AsSpan()[character - 65];
+    public static int[] IndexOfAll(this string grid, char character, int[] countsConstant) {
+        int indexCount = countsConstant.AsSpan()[character - 65];
         int[] indexes = new int[indexCount];
         ReadOnlySpan<char> gridSpan = grid.AsSpan();
         for (int i = gridSpan.IndexOf(character); i > -1; i = grid.IndexOf(character, i + 1)) {
