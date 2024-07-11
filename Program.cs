@@ -4,8 +4,8 @@ using System.Diagnostics;
 internal class Program
 {
     private static readonly int[] indexes = [-6, -5, -4, 1, 6, 5, 4, -1];
-    private const string alphabet = "abcdefghijklmnopqrstuvwxyz";
-    private static readonly int[] scores = [1, 3, 3, 2, 1, 4, 2, 4, 1, 8, 5, 1, 3, 1, 1, 3, 8, 1, 1, 1, 1, 4, 4, 7, 4, 8];
+    private const string alphabet = "ABCDEFGHIJKlMNOpQRSTUVWXYZ";
+    private static readonly int[] scores = [1, 4, 5, 3, 1, 5, 3, 4, 1, 7, 6, 3, 4, 2, 1, 3, 8, 2, 2, 2, 4, 5, 5, 7, 4, 8];
     private static string gridString;
     private const string path = "../../../";
     private static int[] countsConstant;
@@ -17,32 +17,40 @@ internal class Program
     
     public static void Main(string[] args) {
         //temp grid setup
-        gridString = "NQJTAAAKRYBNSXUVRURIIHUEY";
-        doubleWordIndex = 10;
-        doubleLetterIndex = -1;
-        tripleLetterIndex = 5;
+        Console.WriteLine("Enter grid string");
+        gridString = Console.ReadLine().ToUpper();
+        Console.WriteLine("Enter index of double word tile (-1 for not there)");
+        doubleWordIndex = int.Parse(Console.ReadLine());
+        Console.WriteLine("Enter index of double letter tile (-1 for not there)");
+        doubleLetterIndex = int.Parse(Console.ReadLine());
+        Console.WriteLine("Enter index of triple letter tile (-1 for not there)");
+        tripleLetterIndex = int.Parse(Console.ReadLine());
         
         countsConstant = GenerateCounts(gridString);
         counts = new int[26];
         Array.Copy(countsConstant, counts, 26);
 
         indexesOfLetters = GenerateIndexesOfLetters(gridString);
-        
-        foreach (string word in GetPossibleWords("trimmedWords.txt").OrderByDescending(x => x.Length).Take(5)) {
-            Console.WriteLine(word);
-        }
 
-        Console.WriteLine();
-        List<string> possibleWords = GetPossibleWords("trimmedWords.txt");
+        /*uint mask = 0;
+        //set 4
+        mask += 1 << 25;
+        //set 9
+        //mask += 1 << 8;
+        //retrive 4
+        Console.WriteLine(mask);
+        Console.ReadLine();
+        return;*/
+        List<string> possibleWords = GetPossibleWords("collinsWords.txt");
 
+        Console.WriteLine("valid words: " + ScoreWords(possibleWords).Count);
         foreach (Word word in ScoreWords(possibleWords).OrderByDescending(w => w.score).Take(20)) {
             Console.WriteLine($"{word.word}, {word.score}");
         }
 
-        Console.WriteLine(GetPossibleWords("trimmedWords.txt").Count);
-        
-        Console.WriteLine(AreNeighbours(10, 9));
+        Console.WriteLine("possible word count: " + GetPossibleWords("collinsWords.txt").Count);
 
+        Console.ReadLine();
     }
     static int[] GenerateCounts(string grid) {
         int[] counts = new int[26];
@@ -53,8 +61,8 @@ internal class Program
     }
 
     static int[][] GenerateIndexesOfLetters(string grid) {
-        int[][] indexesOfLetters = new int[25][];
-        for (int i = 0; i < 25; i++) {
+        int[][] indexesOfLetters = new int[26][];
+        for (int i = 0; i < 26; i++) {
             indexesOfLetters[i] = grid.IndexOfAll((char)(i + 65), countsConstant);
         }
         return indexesOfLetters;
@@ -80,27 +88,112 @@ internal class Program
         {
 
         });*/
-        words.Clear();
-        //words.Add("AN");
-        words.Add("ANKRY");
+        //words.Clear();
+        //words.Add("KANBANS");
+        
+        Path[] paths = new Path[20];
+        int emptyPathIndex = 0;
+        int emptyPathIndexCopy;
+        int[] currentLetterIndexes;
+        int[] nextLetterIndexes;
+        
         foreach (string word in words) {
-            
-            /*ReadOnlySpan<char> wordSpan = word.AsSpan();
-            int[] startingIndexes = gridString.IndexOfAll(wordSpan[0]);
-            for (int i = 0; i < startingIndexes.Length; i++) {
-                //walk
-                int wordIndex = 1;
-                int score = 0;
-                bool isDoubleScore = false;
-                
-                
-                if (CheckNode()) {
-                    if (isDoubleScore) score *= 2;
-                    wordList.Add(new Word(word, score));
-                }
-            }*/
+            ReadOnlySpan<char> wordSpan = word.AsSpan();
+            int score = ScoreWord(wordSpan);
+            emptyPathIndex = 0;
+            if (score == -1) continue;
+            wordList.Add(new Word(word, score));
         }
         return wordList;
+
+        int ScoreWord(ReadOnlySpan<char> wordSpan) {
+            currentLetterIndexes = indexesOfLetters[wordSpan[0] - 65];
+            nextLetterIndexes = indexesOfLetters[wordSpan[1] - 65];
+            for (int i = 0; i < currentLetterIndexes.Length; i++) {
+                for (int j = 0; j < nextLetterIndexes.Length; j++) {
+                    if (!AreNeighbours(currentLetterIndexes[i], nextLetterIndexes[j])) continue;
+                    uint mask = (uint)((1 << currentLetterIndexes[i]) + (1 << nextLetterIndexes[j]));
+                    Path newPath = new Path(mask, nextLetterIndexes[j]);
+                    paths[emptyPathIndex] = newPath;
+                    emptyPathIndex++;
+                }
+            }
+            if (emptyPathIndex == 0) return -1;
+            for (int i = 1; i < wordSpan.Length - 1; i++) {
+                nextLetterIndexes = indexesOfLetters[wordSpan[i + 1] - 65];
+                emptyPathIndexCopy = emptyPathIndex;
+                bool isInvalidWord = true;
+                for (int j = 0; j < emptyPathIndexCopy; j++) {
+                    if (paths[j].visitedCellsMask == 0) continue;
+                    //grow path
+                    int branchCount = 0;
+                    uint tempMaskAddition = 0;
+                    int tempCurrentCellIndex = -1;
+                    for (int k = 0; k < nextLetterIndexes.Length; k++) {
+                        if (!AreNeighbours(paths[j].currentCellIndex, nextLetterIndexes[k])) continue;
+                        if ((paths[j].visitedCellsMask & (1 << nextLetterIndexes[k])) != 0) continue;
+                        branchCount++;
+                        switch (branchCount) {
+                            case 1:
+                                tempMaskAddition = (uint)(1 << nextLetterIndexes[k]);
+                                tempCurrentCellIndex = nextLetterIndexes[k];
+                                break;
+                            case > 1:
+                            {
+                                uint newMask = paths[j].visitedCellsMask + (uint)(1 << nextLetterIndexes[k]);
+                                Path newPath = new Path(newMask, nextLetterIndexes[k]);
+                                paths[emptyPathIndex] = newPath;
+                                emptyPathIndex++;
+                                break;
+                            }
+                        }
+                    }
+                    if (branchCount == 0) {
+                        paths[j].visitedCellsMask = 0;
+                    }
+                    else {
+                        isInvalidWord = false;
+                        //has to be updated later so new paths made from this one are correct
+                        paths[j].visitedCellsMask += tempMaskAddition;
+                        paths[j].currentCellIndex = tempCurrentCellIndex;
+                    }
+                }
+                if (isInvalidWord) {
+                    
+                    return -1;
+                }
+            }
+            int score = 0;
+            for (int i = 0; i < emptyPathIndex; i++) {
+                if (paths[i].visitedCellsMask == 0) continue;
+                int tempScore = 0;
+                for (int j = 0; j < 25; j++) {
+                    if ((paths[i].visitedCellsMask & (1 << j)) == 0) continue;
+                    tempScore += scores[gridString[j] - 65];
+                }
+                
+                if (doubleLetterIndex > -1 && (paths[i].visitedCellsMask & (1 << doubleLetterIndex)) != 0)
+                    tempScore += scores[gridString[doubleLetterIndex] - 65];
+                if (tripleLetterIndex > -1 && (paths[i].visitedCellsMask & (1 << tripleLetterIndex)) != 0)
+                    tempScore += scores[gridString[tripleLetterIndex] - 65] * 2;
+                if (doubleWordIndex > -1 && (paths[i].visitedCellsMask & (1 << doubleWordIndex)) != 0) tempScore *= 2;
+                if (wordSpan.Length > 5) tempScore += 10;
+                
+                if (tempScore > score) score = tempScore;
+            }
+            return score;
+        }
+    }
+
+    private struct Path
+    {
+        public uint visitedCellsMask;
+        public int currentCellIndex;
+
+        public Path(uint visitedCellsMask, int currentCellIndex) {
+            this.visitedCellsMask = visitedCellsMask;
+            this.currentCellIndex = currentCellIndex;
+        }
     }
 
     static bool AreNeighbours(int index1, int index2) {
