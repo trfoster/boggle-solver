@@ -41,14 +41,14 @@ internal class Program
         Console.WriteLine(mask);
         Console.ReadLine();
         return;*/
-        List<string> possibleWords = GetPossibleWords("collinsWords.txt");
+        List<string> possibleWords = GetPossibleWords("collinsWords.txt", 0);
 
-        Console.WriteLine("valid words: " + ScoreWords(possibleWords).Count);
-        foreach (Word word in ScoreWords(possibleWords).OrderByDescending(w => w.score).Take(20)) {
-            Console.WriteLine($"{word.word}, {word.score}");
+        Console.WriteLine("valid words: " + ScoreWords(possibleWords, 0).Count);
+        foreach (Word word in ScoreWords(possibleWords, 0).OrderByDescending(w => w.score).Take(20)) {
+            Console.WriteLine($"{possibleWords[word.wordIndex]}, {word.score}");
         }
 
-        Console.WriteLine("possible word count: " + GetPossibleWords("collinsWords.txt").Count);
+        Console.WriteLine("possible word count: " + GetPossibleWords("collinsWords.txt", 0).Count);
 
         Console.ReadLine();
     }
@@ -68,13 +68,13 @@ internal class Program
         return indexesOfLetters;
     }
 
-    static List<string> GetPossibleWords(string fileName) {
+    static List<string> GetPossibleWords(string fileName, int swapCount) {
         StreamReader reader = new(path + fileName);
         List<string> words = [];
         while (!reader.EndOfStream) {
             string word = reader.ReadLine()!;
             ReadOnlySpan<char> wordSpan = word.AsSpan();
-            if (wordSpan.SupersetOfGridCount(counts, countsConstant) == 0) {
+            if (wordSpan.SupersetOfGridCount(counts, countsConstant) <= swapCount) {
                 words.Add(word);
             }
         }
@@ -82,7 +82,7 @@ internal class Program
         return words;
     }
 
-    static List<Word> ScoreWords(List<string> words) {
+    static List<Word> ScoreWords(List<string> words, int maxSwaps) {
         List<Word> wordList = [];
         /*Parallel.ForEach(words, word =>
         {
@@ -96,29 +96,32 @@ internal class Program
         int emptyPathIndexCopy;
         int[] currentLetterIndexes;
         int[] nextLetterIndexes;
-        
-        foreach (string word in words) {
-            ReadOnlySpan<char> wordSpan = word.AsSpan();
-            int score = ScoreWord(wordSpan);
+
+        for (int i = 0; i < words.Count; i++) {
+            Word word = ScoreWord(i, maxSwaps);
             emptyPathIndex = 0;
-            if (score == -1) continue;
-            wordList.Add(new Word(word, score));
+            if (word.score == -1) continue;
+            wordList.Add(word);
         }
         return wordList;
-
-        int ScoreWord(ReadOnlySpan<char> wordSpan) {
+        
+        
+        Word ScoreWord(int wordIndex, int maxSwaps) {
+            ReadOnlySpan<char> wordSpan = words[wordIndex].AsSpan();
             currentLetterIndexes = indexesOfLetters[wordSpan[0] - 65];
             nextLetterIndexes = indexesOfLetters[wordSpan[1] - 65];
             for (int i = 0; i < currentLetterIndexes.Length; i++) {
                 for (int j = 0; j < nextLetterIndexes.Length; j++) {
-                    if (!AreNeighbours(currentLetterIndexes[i], nextLetterIndexes[j])) continue;
+                    if (!AreNeighbours(currentLetterIndexes[i], nextLetterIndexes[j])) {
+                        
+                    }
                     uint mask = (uint)((1 << currentLetterIndexes[i]) + (1 << nextLetterIndexes[j]));
                     Path newPath = new Path(mask, nextLetterIndexes[j]);
                     paths[emptyPathIndex] = newPath;
                     emptyPathIndex++;
                 }
             }
-            if (emptyPathIndex == 0) return -1;
+            if (emptyPathIndex == 0) return new Word(-1, -1, 0);
             for (int i = 1; i < wordSpan.Length - 1; i++) {
                 nextLetterIndexes = indexesOfLetters[wordSpan[i + 1] - 65];
                 emptyPathIndexCopy = emptyPathIndex;
@@ -160,7 +163,7 @@ internal class Program
                 }
                 if (isInvalidWord) {
                     
-                    return -1;
+                    return new Word(-1, -1, 0);
                 }
             }
             int score = 0;
@@ -181,7 +184,7 @@ internal class Program
                 
                 if (tempScore > score) score = tempScore;
             }
-            return score;
+            return new Word(wordIndex, score, 0);
         }
     }
 
@@ -324,10 +327,12 @@ static class Extensions
 
 internal struct Word
 {
-    public string word;
+    public int wordIndex;
     public int score;
-    public Word(string word, int score) {
-        this.word = word;
+    public int swaps;
+    public Word(int wordIndex, int score, int swaps) {
+        this.wordIndex = wordIndex;
         this.score = score;
+        this.swaps = swaps;
     }
 }
