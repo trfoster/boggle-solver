@@ -10,21 +10,21 @@ internal class Program
     private const string path = "../../../";
     private static int[] countsConstant;
     private static int[] counts;
-    public static int[][] indexesOfLetters;
-    public static int doubleWordIndex = -1;
-    public static int doubleLetterIndex = -1;
-    public static int tripleLetterIndex = -1;
+    private static byte[][] indexesOfLetters;
+    private static byte doubleWordIndex = 200;
+    private static byte doubleLetterIndex = 200;
+    private static byte tripleLetterIndex = 200;
     
     public static void Main(string[] args) {
         //temp grid setup
         Console.WriteLine("Enter grid string");
-        gridString = Console.ReadLine().ToUpper();
+        gridString = Console.ReadLine().ToUpperInvariant();
         Console.WriteLine("Enter index of double word tile (-1 for not there)");
-        doubleWordIndex = int.Parse(Console.ReadLine());
+        doubleWordIndex = byte.Parse(Console.ReadLine());
         Console.WriteLine("Enter index of double letter tile (-1 for not there)");
-        doubleLetterIndex = int.Parse(Console.ReadLine());
+        doubleLetterIndex = byte.Parse(Console.ReadLine());
         Console.WriteLine("Enter index of triple letter tile (-1 for not there)");
-        tripleLetterIndex = int.Parse(Console.ReadLine());
+        tripleLetterIndex = byte.Parse(Console.ReadLine());
         
         countsConstant = GenerateCounts(gridString);
         counts = new int[26];
@@ -41,14 +41,20 @@ internal class Program
         Console.WriteLine(mask);
         Console.ReadLine();
         return;*/
+        //Stopwatch stopwatch = new Stopwatch();
+        //stopwatch.Start();
         List<string> possibleWords = GetPossibleWords("collinsWords.txt", 0);
-
+        //Console.WriteLine(stopwatch.ElapsedMilliseconds);
+        List<Word> wordList = ScoreWords(possibleWords, 0);
+        int count = wordList.Count;
+        //stopwatch.Stop();
+        //Console.WriteLine(stopwatch.ElapsedMilliseconds);
         Console.WriteLine("valid words: " + ScoreWords(possibleWords, 0).Count);
         foreach (Word word in ScoreWords(possibleWords, 0).OrderByDescending(w => w.score).Take(20)) {
             Console.WriteLine($"{possibleWords[word.wordIndex]}, {word.score}");
         }
 
-        Console.WriteLine("possible word count: " + GetPossibleWords("collinsWords.txt", 0).Count);
+        //Console.WriteLine("possible word count: " + GetPossibleWords("collinsWords.txt", 0).Count);
 
         Console.ReadLine();
     }
@@ -60,8 +66,8 @@ internal class Program
         return counts;
     }
 
-    static int[][] GenerateIndexesOfLetters(string grid) {
-        int[][] indexesOfLetters = new int[26][];
+    static byte[][] GenerateIndexesOfLetters(string grid) {
+        byte[][] indexesOfLetters = new byte[26][];
         for (int i = 0; i < 26; i++) {
             indexesOfLetters[i] = grid.IndexOfAll((char)(i + 65), countsConstant);
         }
@@ -81,6 +87,11 @@ internal class Program
         reader.Close();
         return words;
     }
+    
+    /*
+     * Case 1 - Letter does not exist in grid
+     * Case 2 - Letter is in wrong location (or been used already)
+     */
 
     static List<Word> ScoreWords(List<string> words, int maxSwaps) {
         List<Word> wordList = [];
@@ -91,37 +102,51 @@ internal class Program
         //words.Clear();
         //words.Add("KANBANS");
         
-        Path[] paths = new Path[20];
+        Span<Path> localPaths = stackalloc Path[20];
+        Span<byte> localTempNeighbours = stackalloc byte[8];
         int emptyPathIndex = 0;
+        int maxEmptyPathIndex = 0;
         int emptyPathIndexCopy;
-        int[] currentLetterIndexes;
-        int[] nextLetterIndexes;
+        byte[] currentLetterIndexes;
+        byte[] nextLetterIndexes;
 
         for (int i = 0; i < words.Count; i++) {
-            Word word = ScoreWord(i, maxSwaps);
+            Word word = ScoreWord(i, maxSwaps, localPaths, localTempNeighbours);
+            if (maxEmptyPathIndex < emptyPathIndex) maxEmptyPathIndex = emptyPathIndex;
             emptyPathIndex = 0;
             if (word.score == -1) continue;
             wordList.Add(word);
         }
+        Console.WriteLine($"Max of {maxEmptyPathIndex} paths used");
         return wordList;
         
         
-        Word ScoreWord(int wordIndex, int maxSwaps) {
+        Word ScoreWord(int wordIndex, int maxSwaps, Span<Path> paths, Span<byte> tempNeighbours) {
             ReadOnlySpan<char> wordSpan = words[wordIndex].AsSpan();
             currentLetterIndexes = indexesOfLetters[wordSpan[0] - 65];
             nextLetterIndexes = indexesOfLetters[wordSpan[1] - 65];
-            for (int i = 0; i < currentLetterIndexes.Length; i++) {
-                for (int j = 0; j < nextLetterIndexes.Length; j++) {
-                    if (!AreNeighbours(currentLetterIndexes[i], nextLetterIndexes[j])) {
-                        
+            switch (maxSwaps) {
+                case 0:
+                    for (int i = 0; i < currentLetterIndexes.Length; i++) {
+                        for (int j = 0; j < nextLetterIndexes.Length; j++) {
+                            if (!AreNeighbours(currentLetterIndexes[i], nextLetterIndexes[j])) continue;
+                            uint mask = (uint)((1 << currentLetterIndexes[i]) + (1 << nextLetterIndexes[j]));
+                            Path newPath = new Path(mask, nextLetterIndexes[j], 0);
+                            paths[emptyPathIndex] = newPath;
+                            emptyPathIndex++;
+                        }
                     }
-                    uint mask = (uint)((1 << currentLetterIndexes[i]) + (1 << nextLetterIndexes[j]));
-                    Path newPath = new Path(mask, nextLetterIndexes[j]);
-                    paths[emptyPathIndex] = newPath;
-                    emptyPathIndex++;
-                }
+                    if (emptyPathIndex == 0) {
+                        /*if (maxSwaps < 1) continue;
+                        int neighbourCount = GetNeighbours(currentLetterIndexes[i], tempNeighbours);
+                        for (int k = 0; k < neighbourCount; k++) {
+                            uint mask = (uint)((1 << currentLetterIndexes[i]) + (1 << tempNeighbours[k]));
+                        }*/
+
+                        return new Word(-1, -1, 0);
+                    }
+                    break;
             }
-            if (emptyPathIndex == 0) return new Word(-1, -1, 0);
             for (int i = 1; i < wordSpan.Length - 1; i++) {
                 nextLetterIndexes = indexesOfLetters[wordSpan[i + 1] - 65];
                 emptyPathIndexCopy = emptyPathIndex;
@@ -131,7 +156,7 @@ internal class Program
                     //grow path
                     int branchCount = 0;
                     uint tempMaskAddition = 0;
-                    int tempCurrentCellIndex = -1;
+                    byte tempCurrentCellIndex = 200;
                     for (int k = 0; k < nextLetterIndexes.Length; k++) {
                         if (!AreNeighbours(paths[j].currentCellIndex, nextLetterIndexes[k])) continue;
                         if ((paths[j].visitedCellsMask & (1 << nextLetterIndexes[k])) != 0) continue;
@@ -144,7 +169,7 @@ internal class Program
                             case > 1:
                             {
                                 uint newMask = paths[j].visitedCellsMask + (uint)(1 << nextLetterIndexes[k]);
-                                Path newPath = new Path(newMask, nextLetterIndexes[k]);
+                                Path newPath = new Path(newMask, nextLetterIndexes[k], 0);
                                 paths[emptyPathIndex] = newPath;
                                 emptyPathIndex++;
                                 break;
@@ -175,11 +200,11 @@ internal class Program
                     tempScore += scores[gridString[j] - 65];
                 }
                 
-                if (doubleLetterIndex > -1 && (paths[i].visitedCellsMask & (1 << doubleLetterIndex)) != 0)
+                if (doubleLetterIndex < 200 && (paths[i].visitedCellsMask & (1 << doubleLetterIndex)) != 0)
                     tempScore += scores[gridString[doubleLetterIndex] - 65];
-                if (tripleLetterIndex > -1 && (paths[i].visitedCellsMask & (1 << tripleLetterIndex)) != 0)
+                if (tripleLetterIndex < 200 && (paths[i].visitedCellsMask & (1 << tripleLetterIndex)) != 0)
                     tempScore += scores[gridString[tripleLetterIndex] - 65] * 2;
-                if (doubleWordIndex > -1 && (paths[i].visitedCellsMask & (1 << doubleWordIndex)) != 0) tempScore *= 2;
+                if (doubleWordIndex < 200 && (paths[i].visitedCellsMask & (1 << doubleWordIndex)) != 0) tempScore *= 2;
                 if (wordSpan.Length > 5) tempScore += 10;
                 
                 if (tempScore > score) score = tempScore;
@@ -191,16 +216,22 @@ internal class Program
     private struct Path
     {
         public uint visitedCellsMask;
-        public int currentCellIndex;
+        public byte currentCellIndex;
+        public byte swapsUsed;
 
-        public Path(uint visitedCellsMask, int currentCellIndex) {
+        public Path(uint visitedCellsMask, byte currentCellIndex, byte swapsUsed) {
             this.visitedCellsMask = visitedCellsMask;
             this.currentCellIndex = currentCellIndex;
+            this.swapsUsed = swapsUsed;
         }
     }
 
     static bool AreNeighbours(int index1, int index2) {
-        if (index1 == -1) return false;
+        switch (index1) {
+            case -1:
+            case 200:
+                return false;
+        }
         int absDifference = index2 - index1;
         if (absDifference < 0) absDifference *= -1;
 
@@ -233,6 +264,63 @@ internal class Program
         File.WriteAllLines(path + "trimmedWords.txt", words);
     }
 
+    static int GetNeighbours(byte index, Span<byte> resultArray) {
+        bool hasAbove = index > 4;
+        bool hasRight = (index + 1) % 5 != 0;
+        bool hasBelow = index < 20;
+        bool hasLeft = index % 5 != 0;
+
+        int length;
+        if (index == 0 || index == 4 || index == 20 || index == 24) {
+            length = 3;
+        }
+        else if (!hasAbove || !hasRight || !hasBelow || !hasLeft) {
+            length = 5;
+        }
+        else {
+            length = 8;
+        }
+        
+        int currentIndex = 0;
+
+        if (hasAbove) {
+            resultArray[currentIndex] = (byte)(index - 5);
+            currentIndex++;
+            if (hasLeft) {
+                resultArray[currentIndex] = (byte)(index - 6);
+                currentIndex++;
+            }
+
+            if (hasRight) {
+                resultArray[currentIndex] = (byte)(index - 4);
+                currentIndex++;
+            }
+        }
+        if (hasRight) {
+            resultArray[currentIndex] = (byte)(index + 1);
+            currentIndex++;
+        }
+        if (hasBelow) {
+            resultArray[currentIndex] = (byte)(index + 5);
+            currentIndex++;
+            if (hasRight) {
+                resultArray[currentIndex] = (byte)(index + 6);
+                currentIndex++;
+            }
+
+            if (hasLeft) {
+                resultArray[currentIndex] = (byte)(index + 4);
+                currentIndex++;
+            }
+        }
+        if (hasLeft) {
+            resultArray[currentIndex] = (byte)(index - 1);
+        }
+
+        return length;
+    }
+
+    // change to byte
     static int[] GetNeighbours(int index) {
         bool hasAbove = index > 4;
         bool hasRight = (index + 1) % 5 != 0;
@@ -313,13 +401,12 @@ static class Extensions
         }
         return count;
     }
-
-    public static int[] IndexOfAll(this string grid, char character, int[] countsConstant) {
+    public static byte[] IndexOfAll(this string grid, char character, int[] countsConstant) {
         int indexCount = countsConstant.AsSpan()[character - 65];
-        int[] indexes = new int[indexCount];
+        byte[] indexes = new byte[indexCount];
         ReadOnlySpan<char> gridSpan = grid.AsSpan();
         for (int i = gridSpan.IndexOf(character); i > -1; i = grid.IndexOf(character, i + 1)) {
-            indexes[--indexCount] = i;
+            indexes[--indexCount] = (byte)i;
         }
         return indexes;
     }
